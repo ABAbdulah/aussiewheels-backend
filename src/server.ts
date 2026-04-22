@@ -7,6 +7,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { config } from "./config.js";
+import { buildCorsOptions } from "./cors.js";
 import { loggerOptions } from "./logger.js";
 import { listingsRoutes } from "./routes/listings.js";
 
@@ -19,7 +20,7 @@ export async function buildApp() {
   app.setSerializerCompiler(serializerCompiler);
 
   await app.register(sensible);
-  await app.register(cors, { origin: config.corsOrigin });
+  await app.register(cors, buildCorsOptions(config.corsOrigin));
 
   app.get("/health", async () => ({ status: "ok", service: "aussiewheels-backend" }));
 
