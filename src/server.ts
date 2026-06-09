@@ -10,6 +10,7 @@ import { config } from "./config.js";
 import { buildCorsOptions } from "./cors.js";
 import { loggerOptions } from "./logger.js";
 import { listingsRoutes } from "./routes/listings.js";
+import { authRoutes } from "./routes/auth.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -25,6 +26,7 @@ export async function buildApp() {
   app.get("/health", async () => ({ status: "ok", service: "aussiewheels-backend" }));
 
   await app.register(listingsRoutes, { prefix: "/api/v1" });
+  await app.register(authRoutes, { prefix: "/api/v1" });
 
   return app;
 }
