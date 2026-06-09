@@ -67,9 +67,15 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
 
       const code = crypto.randomInt(100000, 1000000).toString();
       const resetCodeHash = await bcrypt.hash(code, 10);
-      const resetCodeExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      const resetCodeExpiry = new Date(Date.now() + 10 * 60 * 1000); // valid 10 min server-side
       await prisma.user.update({ where: { id: user.id }, data: { resetCodeHash, resetCodeExpiry } });
-      await sendOtpEmail(email, code, user.name);
+      try {
+        await sendOtpEmail(email, code, user.name);
+      } catch (err) {
+        // Don't fail the request if the email provider errors — log it so it's
+        // visible in the host logs (e.g. Railway) for debugging.
+        req.log.error({ err }, "Failed to send password reset email");
+      }
       return generic;
     },
   );
