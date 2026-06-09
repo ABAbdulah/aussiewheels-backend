@@ -1,8 +1,10 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { signToken, verifyToken } from "../auth/token.js";
+import { sendOtpEmail } from "../email.js";
 
 const userDto = z.object({ id: z.string(), name: z.string(), email: z.string() });
 const authResponse = z.object({ token: z.string(), user: userDto });
@@ -44,6 +46,60 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
       if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
         return reply.code(401).send({ message: "Incorrect email or password" });
       }
+      return { token: signToken({ sub: user.id }), user: { id: user.id, name: user.name, email: user.email } };
+    },
+  );
+
+  app.post(
+    "/auth/forgot-password",
+    {
+      schema: {
+        body: z.object({ email: z.string().trim().toLowerCase().email() }),
+        response: { 200: z.object({ message: z.string() }) },
+      },
+    },
+    async (req) => {
+      const { email } = req.body;
+      const user = await prisma.user.findUnique({ where: { email } });
+      // Always respond the same way to avoid leaking which emails exist.
+      const generic = { message: "If an account exists for that email, a reset code has been sent." };
+      if (!user) return generic;
+
+      const code = crypto.randomInt(100000, 1000000).toString();
+      const resetCodeHash = await bcrypt.hash(code, 10);
+      const resetCodeExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      await prisma.user.update({ where: { id: user.id }, data: { resetCodeHash, resetCodeExpiry } });
+      await sendOtpEmail(email, code, user.name);
+      return generic;
+    },
+  );
+
+  app.post(
+    "/auth/reset-password",
+    {
+      schema: {
+        body: z.object({
+          email: z.string().trim().toLowerCase().email(),
+          code: z.string().trim().length(6, "Enter the 6-digit code"),
+          password: z.string().min(6, "Password must be at least 6 characters").max(200),
+        }),
+        response: { 200: authResponse, 400: errorResponse },
+      },
+    },
+    async (req, reply) => {
+      const { email, code, password } = req.body;
+      const user = await prisma.user.findUnique({ where: { email } });
+      const invalid = () => reply.code(400).send({ message: "Invalid or expired reset code" });
+
+      if (!user || !user.resetCodeHash || !user.resetCodeExpiry) return invalid();
+      if (user.resetCodeExpiry.getTime() < Date.now()) return invalid();
+      if (!(await bcrypt.compare(code, user.resetCodeHash))) return invalid();
+
+      const passwordHash = await bcrypt.hash(password, 10);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash, resetCodeHash: null, resetCodeExpiry: null },
+      });
       return { token: signToken({ sub: user.id }), user: { id: user.id, name: user.name, email: user.email } };
     },
   );
