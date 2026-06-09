@@ -1,0 +1,94 @@
+// AussieWheels — Prisma schema
+// Postgres-backed car marketplace listings.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PriceIndicator {
+  GREAT // Great Price
+  GOOD // Good Price
+  FAIR // Fair Price
+  HIGH // Above market
+}
+
+enum Condition {
+  NEW
+  USED
+  DEMO
+}
+
+enum SellerType {
+  DEALER
+  PRIVATE
+}
+
+/// A single vehicle for sale. One row == one listing card + one detail page.
+model Listing {
+  id   String @id @default(cuid())
+  slug String @unique
+
+  // Taxonomy
+  vertical String @default("cars")
+  make     String
+  model    String
+  variant  String?
+  year     Int
+
+  // Pricing (whole AUD dollars)
+  price          Int
+  driveawayPrice Int?
+  priceIndicator PriceIndicator?
+
+  // Core specs
+  odometer     Int // km
+  transmission String // Automatic | Manual
+  fuel         String // Petrol | Diesel | Electric | Hybrid | Plug-in Hybrid | LPG
+  bodyType     String // SUV | Hatch | Sedan | Wagon | Ute | Coupe | Convertible | Van | People Mover
+  driveType    String? // 4x4 | AWD | FWD | RWD | 4x2
+  doors        Int?
+  seats        Int?
+  colour       String?
+  engine       String? // "2.5L 4cyl"
+  cylinders    Int?
+  powerKw      Int?
+
+  // Condition & seller
+  condition  Condition  @default(USED)
+  sellerType SellerType @default(DEALER)
+  sellerName String?
+
+  // Location
+  suburb String
+  state  String // NSW | VIC | QLD | WA | SA | TAS | ACT | NT
+
+  // Content
+  description String  @db.Text
+  features    String[]
+  images      String[]
+
+  // History / trust
+  vin            String?
+  rego           String?
+  warrantyMonths Int?
+  warrantyKm     Int?
+
+  // EV / badges
+  evRangeKm       Int? // WLTP range
+  specialOffer    Boolean @default(false)
+  tradeInEligible Boolean @default(false)
+  reviewScore     Int? // expert review /100
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([vertical, make, model])
+  @@index([price])
+  @@index([year])
+  @@index([state])
+}
